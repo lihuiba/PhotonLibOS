@@ -107,7 +107,7 @@ ISocketStream* PooledDialer::dial(std::string_view host, uint16_t port, bool sec
     if (secure) {
         tlssock->timeout(timeout);
         sock = tlssock->connect(ep);
-        tls_stream_set_hostname(sock, host.data());
+        tls_stream_set_hostname(sock, estring_view(host).extract_c_str());
     } else {
         tcpsock->timeout(timeout);
         sock = tcpsock->connect(ep);
@@ -222,7 +222,14 @@ public:
             LOG_ERROR_RETURN(0, ROUNDTRIP_NEED_RETRY, "send header failed, retry");
         }
         sock->timeout(tmo.timeout());
-        if (op->body_stream) {
+        if (op->body_buffer_size > 0) {
+            // send body_buffer
+            if (req.write(op->body_buffer, op->body_buffer_size) < 0) {
+                sock->close();
+                req.reset_status();
+                LOG_ERROR_RETURN(0, ROUNDTRIP_NEED_RETRY, "send body buffer failed, retry");
+            }
+        } else if (op->body_stream) {
             // send body_stream
             if (req.write_stream(op->body_stream) < 0) {
                 sock->close();
