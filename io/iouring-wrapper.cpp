@@ -45,8 +45,6 @@ constexpr static EventsMap<EVUnderlay<POLLIN | POLLRDHUP, POLLOUT, POLLERR>> evm
 
 class iouringEngine : public MasterEventEngine, public CascadingEventEngine, public ResetHandle {
 public:
-    explicit iouringEngine(bool master) : m_master(master) {}
-
     ~iouringEngine() {
         LOG_INFO("Finish event engine: iouring ", VALUE(m_master));
         fini();
@@ -75,8 +73,11 @@ public:
         return 0;
     }
 
-    int init() {
+    int init() { return init({m_master, m_setup_sqpoll, false, false}); }
+    int init(iouring_args args) {
         int compare_result;
+        m_master = args.is_master;
+        m_setup_sqpoll = args.setup_sqpoll;
         if (kernel_version_compare("5.11", compare_result) == 0 && compare_result <= 0) {
             rlimit resource_limit{.rlim_cur = RLIM_INFINITY, .rlim_max = RLIM_INFINITY};
             if (setrlimit(RLIMIT_MEMLOCK, &resource_limit) != 0)
@@ -92,6 +93,17 @@ public:
         io_uring_params params{};
         if (m_cooperative_task_flag == 1)
             params.flags = IORING_SETUP_COOP_TASKRUN;
+        if (args.setup_iopoll)
+            params.flags |= IORING_SETUP_IOPOLL;
+        if (args.setup_sqpoll) {
+            params.flags |= IORING_SETUP_SQPOLL;
+            // params.sq_thread_idle = 10;
+            if (args.setup_sq_aff) {
+                params.flags |= IORING_SETUP_SQ_AFF;
+                params.sq_thread_cpu = args.sq_thread_cpu;
+            }
+        }
+
         int ret = io_uring_queue_init_params(QUEUE_DEPTH, m_ring, &params);
         if (ret != 0) {
             // reset m_ring so that the destructor won't do duplicate munmap cleanup (io_uring_queue_exit)
@@ -101,10 +113,10 @@ public:
         }
 
         // Check feature supported
-        for (auto i : REQUIRED_FEATURES) {
-            if (!(params.features & i)) {
-                LOG_ERROR_RETURN(0, -1, "iouring: required feature not supported");
-            }
+        if (!check_required_features(params, IORING_FEAT_CUR_PERSONALITY,
+                        IORING_FEAT_NODROP,  IORING_FEAT_FAST_POLL,
+                        IORING_FEAT_EXT_ARG, IORING_FEAT_RW_CUR_POS)) {
+            LOG_ERROR_RETURN(0, -1, "iouring: required feature not supported");
         }
 
         // Check opcode supported
@@ -162,6 +174,15 @@ public:
         return 0;
     }
 
+
+    template<typename T, typename...Ts>
+    bool check_required_features(const io_uring_params& params, T f, Ts...fs) {
+        return (params.features & f) && check_required_features(params, fs...);
+    }
+    bool check_required_features(const io_uring_params& params) {
+        return true;
+    }
+
     /**
      * @brief Get a SQE from ring, prepare IO, and wait for completion. Note all the SQEs are batch submitted
      *     later in the `wait_and_fire_events`.
@@ -197,6 +218,10 @@ public:
             io_uring_prep_link_timeout(sqe, &ts, 0);
             io_uring_sqe_set_data(sqe, &timer_ctx);
         }
+
+        int ret = io_uring_submit(m_ring);
+        if (ret < 0)
+            LOG_ERROR_RETURN(-ret, -1, "iouring: fail to submit when adding interest, ", ERRNO(-ret));
 
         SCOPED_PAUSE_WORK_STEALING;
         photon::thread_sleep(-1);
@@ -239,7 +264,6 @@ public:
         }
         return 0;
     }
-
     int add_interest(Event e) override {
         auto* sqe = _get_sqe();
         if (sqe == nullptr)
@@ -261,9 +285,8 @@ public:
         }
         io_uring_sqe_set_data(sqe, &pair.first->second.io_ctx);
         int ret = io_uring_submit(m_ring);
-        if (ret < 0) {
+        if (ret < 0)
             LOG_ERROR_RETURN(-ret, -1, "iouring: fail to submit when adding interest, ", ERRNO(-ret));
-        }
         return 0;
     }
 
@@ -281,9 +304,8 @@ public:
         io_uring_prep_poll_remove(sqe, (__u64) &iter->second.io_ctx);
         io_uring_sqe_set_data(sqe, nullptr);
         int ret = io_uring_submit(m_ring);
-        if (ret < 0) {
+        if (ret < 0)
             LOG_ERROR_RETURN(-ret, -1, "iouring: fail to submit when removing interest, ", ERRNO(-ret));
-        }
         return 0;
     }
 
@@ -537,22 +559,16 @@ private:
         return {sec, nsec};
     }
 
-    static constexpr const uint32_t REQUIRED_FEATURES[] = {
-            IORING_FEAT_CUR_PERSONALITY, IORING_FEAT_NODROP,
-            IORING_FEAT_FAST_POLL, IORING_FEAT_EXT_ARG,
-            IORING_FEAT_RW_CUR_POS};
     static const int QUEUE_DEPTH = 16384;
     static const int REGISTER_FILES_SPARSE_FD = -1;
     static const int REGISTER_FILES_MAX_NUM = 10000;
-    bool m_master;
+    bool m_master, m_setup_sqpoll;
     io_uring* m_ring = nullptr;
     int m_eventfd = -1;
     std::unordered_map<fdInterest, eventCtx, fdInterestHasher> m_event_contexts;
     static int m_register_files_flag;
     static int m_cooperative_task_flag;
 };
-
-constexpr const uint32_t iouringEngine::REQUIRED_FEATURES[];
 
 int iouringEngine::m_register_files_flag = -1;
 
@@ -664,18 +680,17 @@ int iouring_unregister_files(int fd) {
     return ee->register_unregister_files(fd, false);
 }
 
-__attribute__((noinline))
-static iouringEngine* new_iouring(bool is_master) {
-    LOG_INFO("Init event engine: iouring ", VALUE(is_master));
-    return NewObj<iouringEngine>(is_master) -> init();
+void* new_iouring_event_engine(iouring_args args) {
+    LOG_INFO("Init event engine: iouring ",
+        make_named_value("is_master",     args.is_master),
+        make_named_value("setup_sqpoll",  args.setup_sqpoll),
+        make_named_value("setup_sq_aff",  args.setup_sq_aff),
+        make_named_value("sq_thread_cpu", args.sq_thread_cpu));
+    auto uring = NewObj<iouringEngine>() -> init(args);
+    if (args.is_master) return uring;
+    CascadingEventEngine* c = uring;
+    return c;
 }
 
-MasterEventEngine* new_iouring_master_engine() {
-    return new_iouring(true);
-}
-
-CascadingEventEngine* new_iouring_cascading_engine() {
-    return new_iouring(false);
-}
 
 }
