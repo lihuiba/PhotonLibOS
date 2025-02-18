@@ -156,15 +156,8 @@ public:
     }
 #endif
 
-    bool istarts_with(estring_view x) {
-        return strncasecmp(data(), x.data(), x.size()) == 0;
-    }
-
-    int icmp(estring_view x) {
-        auto ret = strncasecmp(data(), x.data(), std::min(size(), x.size()));
-        if (ret != 0) return ret;
-        return size() - x.size();
-    }
+    bool istarts_with(estring_view x);
+    int icmp(estring_view x);
 
     template<typename Separator>
     struct _split
@@ -705,26 +698,6 @@ inline char toupper_fast(char c) {
     return c - ('a' - 'A') * ('a' <= c && c <= 'z');
 }
 
-inline uint64_t tolower_fast8(uint64_t x) {
-    uint64_t all_bytes = 0x0101010101010101;
-    uint64_t heptets = x & (0x7f * all_bytes);
-    uint64_t is_ascii = ~x & (0x80 * all_bytes);
-    uint64_t is_gt_Z = heptets + (0x7f - 'Z') * all_bytes;
-    uint64_t is_ge_A = heptets + (0x80 - 'A') * all_bytes;
-    uint64_t is_upper = (is_ge_A ^ is_gt_Z) & is_ascii;
-    return x | (is_upper >> 2);
-}
-
-inline uint64_t toupper_fast8(uint64_t x) {
-    uint64_t all_bytes = 0x0101010101010101;
-    uint64_t heptets = x & (0x7f * all_bytes);
-    uint64_t is_ascii = ~x & (0x80 * all_bytes);
-    uint64_t is_gt_z = heptets + (0x7f - 'z') * all_bytes;
-    uint64_t is_ge_a = heptets + (0x80 - 'a') * all_bytes;
-    uint64_t is_lower = (is_ge_a ^ is_gt_z) & is_ascii;
-    return x ^ (is_lower >> 2);
-}
-
 // convert string to lower or upper, the storage of out must be >= len + 1
 // it's possible that out == in
 void tolower_fast(char* out, const char* in, size_t len);
@@ -734,3 +707,12 @@ void toupper_fast(char* out, const char* in, size_t len);
 int stricmp_fast(std::string_view a, std::string_view b);
 
 } // namespace photon
+
+inline bool estring_view::istarts_with(estring_view x) {
+    return size() >= x.size() && photon::stricmp_fast(
+            {data(), x.size()}, x) == 0;
+}
+
+inline int estring_view::icmp(estring_view x) {
+    return photon::stricmp_fast(*this, x);
+}

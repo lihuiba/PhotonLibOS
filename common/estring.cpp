@@ -161,6 +161,26 @@ static_assert(
 
 namespace photon {
 
+inline uint64_t tolower_fast8(uint64_t x) {
+    uint64_t all_bytes = 0x0101010101010101;
+    uint64_t heptets = x & (0x7f * all_bytes);
+    uint64_t is_ascii = ~x & (0x80 * all_bytes);
+    uint64_t is_gt_Z = heptets + (0x7f - 'Z') * all_bytes;
+    uint64_t is_ge_A = heptets + (0x80 - 'A') * all_bytes;
+    uint64_t is_upper = (is_ge_A ^ is_gt_Z) & is_ascii;
+    return x | (is_upper >> 2);
+}
+
+inline uint64_t toupper_fast8(uint64_t x) {
+    uint64_t all_bytes = 0x0101010101010101;
+    uint64_t heptets = x & (0x7f * all_bytes);
+    uint64_t is_ascii = ~x & (0x80 * all_bytes);
+    uint64_t is_gt_z = heptets + (0x7f - 'z') * all_bytes;
+    uint64_t is_ge_a = heptets + (0x80 - 'a') * all_bytes;
+    uint64_t is_lower = (is_ge_a ^ is_gt_z) & is_ascii;
+    return x ^ (is_lower >> 2);
+}
+
 void tolower_fast(char* out, const char* in, size_t len) {
     size_t i = 0;
     for (; i < len/8*8; i+=8)
@@ -179,26 +199,30 @@ void toupper_fast(char* out, const char* in, size_t len) {
     out[len] = '\0';
 }
 
-
+inline uint64_t sub(const char* a, const char* b) {
+    auto ca = tolower_fast8(*(uint64_t*)a);
+    auto cb = tolower_fast8(*(uint64_t*)b);
+    return __builtin_bswap64(ca) - __builtin_bswap64(cb);
+}
+inline int INT(uint64_t x) { return int((x >> 32) | (x & 0xffffffff)); }
 int stricmp_fast(std::string_view a, std::string_view b) {
-    size_t i = 0, min = std::min(a.size(), b.size());
-    for (; i < min/8*8; i+=8) {
-        auto ca = tolower_fast8(*(uint64_t*)&a[i]);
-        auto cb = tolower_fast8(*(uint64_t*)&b[i]);
-        if (ca == cb) continue;
-        auto c = ca - cb;
-        for (; c; c>>=8) {
-            auto delta = (char)(c & 0xff);
-            if (delta) return delta;
+    size_t i = 0, len = std::min(a.size(), b.size());
+    if (unlikely(len < 8)) {
+        for (; i < len; i++) {
+            auto ca = tolower_fast(a[i]);
+            auto cb = tolower_fast(b[i]);
+            if (auto x = ca - cb)
+                return x;
         }
+        return INT(a.size() - b.size());
     }
-    for (; i < min; i++) {
-        auto ca = tolower_fast(a[i]);
-        auto cb = tolower_fast(b[i]);
-        auto delta = ca - cb;
-        if (delta) return delta;
-    }
-    return int(a.size() - b.size());
+    for (; i < len/8*8; i+=8)
+        if (auto x = sub(&a[i], &b[i]))
+            return INT(x);
+    if (likely(i < len)) // len >= 8
+        if (auto x = sub(&a[len-8], &b[len-8]))
+            return INT(x);
+    return INT(a.size() - b.size());
 }
 
 }
