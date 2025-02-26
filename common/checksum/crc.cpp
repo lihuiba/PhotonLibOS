@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "crc32c.h"
 #include "crc64ecma.h"
+#include <stdlib.h>
 #if defined(__linux__) && defined(__aarch64__)
 #include <sys/auxv.h>
 #include <asm/hwcap.h>
@@ -127,11 +128,15 @@ static void crc_init() {
 #if defined(__x86_64__)
     __builtin_cpu_init();
     crc32c_auto = __builtin_cpu_supports("sse4.2") ? crc32c_hw : crc32c_sw;
+#ifndef __CYGWIN__
     auto avx512 = __builtin_cpu_supports("avx512f")  &&
                   __builtin_cpu_supports("avx512dq") &&
                   __builtin_cpu_supports("avx512vl") &&
                   __builtin_cpu_supports("vpclmulqdq");
     crc64ecma_auto = avx512 ? crc64ecma_hw_avx512 :
+#else
+    crc64ecma_auto =
+#endif
                  (__builtin_cpu_supports("sse") &&
                   __builtin_cpu_supports("pclmul")) ?
                         crc64ecma_hw_sse128 : crc64ecma_sw;
@@ -618,7 +623,7 @@ uint64_t crc64ecma_hw_sse128(const uint8_t *buf, size_t len, uint64_t crc) {
     return crc64ecma_hw_portable(buf, len, crc, crc64ecma_hw_big_sse);
 }
 
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(__CYGWIN__)
 #ifdef __clang__
 #pragma clang attribute pop
 #pragma clang attribute push (__attribute__((target("crc32,sse4.1,pclmul,avx512f,avx512dq,avx512vl,vpclmulqdq"))), apply_to=function)
@@ -714,6 +719,7 @@ __m128i crc64ecma_hw_big_avx512(const uint8_t*& data, size_t& nbytes, uint64_t c
 uint64_t crc64ecma_hw_avx512(const uint8_t *buf, size_t len, uint64_t crc) {
     return crc64ecma_hw_portable(buf, len, crc, crc64ecma_hw_big_avx512);
 }
+
 #ifdef __clang__
 #pragma clang attribute pop
 #endif

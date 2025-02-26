@@ -27,9 +27,9 @@ limitations under the License.
 #include <photon/common/object.h>
 #include <photon/common/string_view.h>
 
-#ifdef __linux__
+#ifndef __APPLE__
 #define _in_addr_field s6_addr32
-#else // macOS
+#else
 #define _in_addr_field __u6_addr.__u6_addr32
 #endif
 

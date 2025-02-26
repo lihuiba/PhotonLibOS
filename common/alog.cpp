@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#ifdef _WIN64
-#define _POSIX_C_SOURCE 1
-#endif
+#define _GNU_SOURCE
 #include "alog.h"
 #include "lockfree_queue.h"
 #include "photon/thread/thread.h"

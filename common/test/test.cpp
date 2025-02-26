@@ -48,7 +48,7 @@ limitations under the License.
 #include <string.h>
 //#include <gmock/gmock.h>
 //#include <malloc.h>
-#ifndef __clang__
+#if !defined(__clang__) && !defined(__CYGWIN__)
 #include <gnu/libc-version.h>
 #endif
 #include "../../test/gtest.h"
@@ -1416,7 +1416,7 @@ int main(int argc, char **argv)
     // #ifdef GIT_VERSION
     auto version = get_version();
     cout<<"git HEAD: "<<version.c_str() << endl;
-#ifndef __clang__
+#if !defined(__clang__) && !defined(__CYGWIN__)
     cout<<"gnu_get_libc_version() = "<< gnu_get_libc_version() <<endl;
 #endif
     // #endif

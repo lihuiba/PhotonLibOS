@@ -26,6 +26,9 @@ limitations under the License.
 #include <linux/errqueue.h>
 #include <sys/sendfile.h>
 #endif
+#if defined(__CYGWIN__)
+// #include <mswsock.h>
+#endif
 #include <sys/uio.h>
 #include <photon/io/fd-events.h>
 #include <photon/net/socket.h>
@@ -149,9 +152,11 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count,
     ssize_t ret = DOIO_ONCE(::sendfile(out_fd, in_fd, *offset, &len, nullptr, 0),
                   wait_for_fd_writable(out_fd, timeout));
     return (ret == 0) ? len : (int)ret;
-#else
+#elif defined(__linux__)
     return DOIO_ONCE(::sendfile(out_fd, in_fd, offset, count),
            wait_for_fd_writable(out_fd, timeout));
+#else
+    return -1;
 #endif
 }
 
@@ -287,7 +292,7 @@ int fill_uds_path(struct sockaddr_un& name, const char* path, size_t count) {
 
     memset(&name, 0, sizeof(name));
     memcpy(name.sun_path, path, count + 1);
-#ifndef __linux__
+#ifdef __APPLE__
     name.sun_len = 0;
 #endif
     name.sun_family = AF_UNIX;

@@ -21,9 +21,15 @@ limitations under the License.
 #include <photon/thread/thread.h>
 #include "fuse_adaptor.h"
 
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
+
 #ifndef FUSE_USE_VERSION
 #define FUSE_USE_VERSION 29
 #endif
+
+#include <fuse/fuse.h>
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -598,8 +604,13 @@ static int xmp_poll(const char *path, struct fuse_file_info *fi,
 
 static struct fuse_operations xmp_oper = {
     .getattr     = xmp_getattr,
+#ifdef __CYGWIN__
+    .getdir      = xmp_getdir,
+    .readlink    = xmp_readlink,
+#else
     .readlink    = xmp_readlink,
     .getdir      = xmp_getdir,
+#endif
     .mknod       = xmp_mknod,
     .mkdir       = xmp_mkdir,
     .unlink      = xmp_unlink,

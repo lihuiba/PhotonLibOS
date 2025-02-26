@@ -81,6 +81,9 @@ inline int posix_memalign(void** memptr, size_t alignment, size_t size) {
 #define DEF_ASM_FUNC(name) ".text\n .p2align 4\n" \
                            ".def "#name"; .scl 3; .type 32; .endef\n" \
                            #name": "
+#elif defined(__CYGWIN__)
+#define DEF_ASM_FUNC(name) ".section .text."#name",\"x\"\n" \
+                           #name": "
 #else
 #define DEF_ASM_FUNC(name) ".section .text."#name",\"axG\",@progbits,"#name",comdat\n" \
                            ".type "#name", @function\n" \
@@ -266,7 +269,7 @@ namespace photon
             GetCurrentThreadStackLimits(&stack_low, &stack_high);
             stackful_alloc_top = (char*)stack_low;
             stack_size = stack_high - stack_low;
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__CYGWIN__)
             pthread_attr_t gattr;
             pthread_getattr_np(pthread_self(), &gattr);
             pthread_attr_getstack(&gattr,
@@ -691,7 +694,7 @@ namespace photon
 #pragma GCC diagnostic pop
 
 #if defined(__x86_64__)
-#if !defined(_WIN64)
+#if !defined(_WIN64) && !defined(__CYGWIN__)
     asm(
 DEF_ASM_FUNC(_photon_switch_context) // (void** rdi_to, void** rsi_from)
 R"(

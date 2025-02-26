@@ -15,7 +15,9 @@ limitations under the License.
 */
 
 #include <sys/utsname.h>
+#if !defined(__CYGWIN__)
 #include <execinfo.h>
+#endif
 #include "utility.h"
 #include "estring.h"
 #include "alog.h"
@@ -58,6 +60,7 @@ int kernel_version_compare(std::string_view dst, int& result) {
     return 0;
 }
 
+#if !defined(__CYGWIN__)
 void print_stacktrace() {
     int size = 16;
     void * array[16];
@@ -69,4 +72,5 @@ void print_stacktrace() {
     }
     free(stacktrace);
 }
+#endif
 

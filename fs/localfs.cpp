@@ -25,6 +25,7 @@ limitations under the License.
 #include <sys/uio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <sys/statvfs.h>
 #include <sys/ioctl.h>
 #include <sys/xattr.h>
@@ -119,11 +120,13 @@ namespace fs
         {
             return fdatasync();
         }
-#ifdef __linux__
+#if defined(__linux__) || defined(__CYGWIN__)
+#ifndef __CYGWIN__
         virtual int fiemap(struct fiemap* map) override
         {
             return UISysCall(::ioctl(fd, FS_IOC_FIEMAP, (::fiemap*)map));
         }
+#endif
         virtual int fallocate(int mode, off_t offset, off_t len) override final
         {
             return UISysCall(::fallocate(fd, mode, offset, len));
@@ -217,13 +220,14 @@ namespace fs
             thread_yield();
             return UISysCall(::pwrite(fd, buf, count, offset));
         }
-#ifdef _GNU_SOURCE
+#if defined(_GNU_SOURCE) && !defined(__CYGWIN__)
         virtual int sync_file_range(off_t offset, off_t nbytes, unsigned int flags) override
         {
             thread_yield();
             return UISysCall(::sync_file_range(fd, offset, nbytes, flags));
         }
 #endif
+#ifndef __CYGWIN__
         virtual ssize_t preadv(const struct iovec *iov, int iovcnt, off_t offset) override
         {
             thread_yield();
@@ -234,6 +238,20 @@ namespace fs
             thread_yield();
             return UISysCall(::pwritev(fd, iov, iovcnt, offset));
         }
+#else
+        virtual ssize_t preadv(const struct iovec *iov, int iovcnt, off_t offset) override
+        {
+            thread_yield();
+            lseek(offset, SEEK_SET);
+            return UISysCall(::readv(fd, iov, iovcnt));
+        }
+        virtual ssize_t pwritev(const struct iovec *iov, int iovcnt, off_t offset) override
+        {
+            thread_yield();
+            lseek(offset, SEEK_SET);
+            return UISysCall(::writev(fd, iov, iovcnt));
+        }
+#endif
 #ifdef __APPLE__
         virtual int fdatasync() override
         {
@@ -249,7 +267,7 @@ namespace fs
 #endif
     };
 
-#ifdef __linux__
+#ifndef __APPLE__
     template<typename AIOEngine>
     class AioFileAdaptor final : public BaseFileAdaptor
     {
@@ -515,7 +533,7 @@ namespace fs
         {
             return UISysCall(::statvfs(path, buf));
         }
-#ifdef __linux__
+#if defined(__linux__) || defined(__CYGWIN__)
         virtual ssize_t getxattr(const char *path, const char *name, void *value, size_t size) override
         {
             return UISysCall(::getxattr(path, name, value, size));

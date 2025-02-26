@@ -22,7 +22,7 @@ limitations under the License.
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
-#include <sys/sendfile.h>
+// #include <sys/sendfile.h>
 #include <sys/time.h>
 #include <netinet/tcp.h>
 #include <fcntl.h>

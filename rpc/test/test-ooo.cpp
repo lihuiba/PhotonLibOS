@@ -25,7 +25,7 @@ limitations under the License.
 #define private public
 #define protected public
 #include "../out-of-order-execution.cpp"
-#include "../../thread/thread.cpp"
+// #include "../../thread/thread.cpp"
 #include <photon/thread/thread11.h>
 
 using namespace std;
