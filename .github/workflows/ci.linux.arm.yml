@@ -8,7 +8,7 @@ on:
 
 jobs:
   arm-linux-build-and-test:
-    runs-on: ubuntu-24.04-arm
+    runs-on: [self-hosted, Linux, ARM64]
 
     container:
       image: ghcr.io/alibaba/photon-ut-base:latest
@@ -26,51 +26,19 @@ jobs:
       - name: Build-Debug-921-C++14
         run: |
           source /opt/rh/gcc-toolset-9/enable
-          cmake -B build -D CMAKE_BUILD_TYPE=MinSizeRel   \
-                         -D PHOTON_ENABLE_ECOSYSTEM=ON    \
-                         -D PHOTON_BUILD_TESTING=ON       \
-                         -D PHOTON_ENABLE_SASL=ON         \
-                         -D PHOTON_ENABLE_FUSE=ON         \
-                         -D PHOTON_ENABLE_URING=ON        \
-                         -D PHOTON_ENABLE_LIBCURL=ON      \
-                         -D PHOTON_ENABLE_EXTFS=ON
-          cmake --build build -j $(nproc)
+          cmake -B build \
+            -D CMAKE_BUILD_TYPE=MinSizeRel \
+            -D PHOTON_ENABLE_ECOSYSTEM=ON \
+            -D PHOTON_BUILD_TESTING=ON \
+            -D PHOTON_ENABLE_SASL=ON \
+            -D PHOTON_ENABLE_FUSE=ON \
+            -D PHOTON_ENABLE_LIBCURL=ON \
+            -D PHOTON_ENABLE_EXTFS=ON
+          cmake --build build -j $(nproc) -- VERBOSE=1
 
-<<<<<<< HEAD
-      - name: Test
-        run: |
-          cd build
-          nohup redis-server &
-          ctest --timeout 3600 -V
-          pkill redis-server
-
-  debug-build-from-source:
-    runs-on: ubuntu-latest
-    container:
-      image: almalinux:8
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build
-=======
       - name: Build-Debug-921-C++17
->>>>>>> aaabc01 (make it compiles with C++17/20/23)
         run: |
-          dnf install -y 'dnf-command(config-manager)'
-          dnf config-manager --set-enabled powertools
-          dnf -q -y install git gcc-c++ cmake gcc-toolset-9-gcc-c++ nasm
           source /opt/rh/gcc-toolset-9/enable
-<<<<<<< HEAD
-          cmake -B build -D CMAKE_BUILD_TYPE=Debug        \
-                         -D PHOTON_BUILD_DEPENDENCIES=ON  \
-                         -D PHOTON_BUILD_TESTING=ON       \
-                         -D PHOTON_ENABLE_ECOSYSTEM=ON    \
-                         -D PHOTON_ENABLE_SASL=OFF        \
-                         -D PHOTON_ENABLE_FUSE=OFF        \
-                         -D PHOTON_ENABLE_URING=ON        \
-                         -D PHOTON_ENABLE_LIBCURL=OFF     \
-                         -D PHOTON_ENABLE_EXTFS=OFF
-          cmake --build build -j $(nproc)
-=======
           rm -fr build
           cmake -B build \
             -D PHOTON_CXX_STANDARD=17 \
@@ -116,5 +84,29 @@ jobs:
       - name: Test
         run: |
           cd build
-          ctest -E test-lockfree --timeout 3600 -V
->>>>>>> aaabc01 (make it compiles with C++17/20/23)
+          nohup redis-server &
+          ctest --timeout 3600 -V
+          pkill redis-server
+
+  debug-build-from-source:
+    runs-on: ubuntu-latest
+    container:
+      image: almalinux:8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          dnf install -y 'dnf-command(config-manager)'
+          dnf config-manager --set-enabled powertools
+          dnf -q -y install git gcc-c++ cmake gcc-toolset-9-gcc-c++ nasm
+          source /opt/rh/gcc-toolset-9/enable
+          cmake -B build -D CMAKE_BUILD_TYPE=Debug        \
+                         -D PHOTON_BUILD_DEPENDENCIES=ON  \
+                         -D PHOTON_BUILD_TESTING=ON       \
+                         -D PHOTON_ENABLE_ECOSYSTEM=ON    \
+                         -D PHOTON_ENABLE_SASL=OFF        \
+                         -D PHOTON_ENABLE_FUSE=OFF        \
+                         -D PHOTON_ENABLE_URING=ON        \
+                         -D PHOTON_ENABLE_LIBCURL=OFF     \
+                         -D PHOTON_ENABLE_EXTFS=OFF
+          cmake --build build -j $(nproc)
