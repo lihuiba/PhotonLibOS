@@ -161,7 +161,7 @@ protected:
 // Do not use as IPC base. Use it to collect data and send by
 // LockfreeSPSCRingQueue
 template <typename T, size_t N>
-class LockfreeMPMCRingQueue : public LockfreeRingQueueBase<T, N> {
+class LockfreeMPMCRingQueue0 : public LockfreeRingQueueBase<T, N> {
 protected:
     using Base = LockfreeRingQueueBase<T, N>;
 
@@ -257,6 +257,82 @@ public:
         T ret = slot;
         mark.store(this_turn_read(h), std::memory_order_release);
         return ret;
+    }
+};
+
+template <typename T, size_t N>
+class LockfreeMPMCRingQueue : public LockfreeRingQueueBase<T, N> {
+protected:
+    using Base = LockfreeRingQueueBase<T, N>;
+
+    using Base::head;
+    using Base::idx;
+    using Base::tail;
+
+    // read_complete <= head <=...<= write_complete <= tail
+    alignas(Base::CACHELINE_SIZE) std::atomic<uint64_t> write_complete;
+    alignas(Base::CACHELINE_SIZE) std::atomic<uint64_t> read_complete;
+
+    // 0 means no data in corresponding slot, 1 means there is data
+    std::atomic<uint8_t> marks[Base::capacity]{};
+
+    T slots[Base::capacity];
+
+
+public:
+    using Base::empty;
+    using Base::full;
+
+    bool push(const T& x) {
+        auto t = tail.load(std::memory_order_acquire);
+        for (;;) {
+            auto h = read_complete.load(std::memory_order_acquire);
+            if (Base::check_full(h, t)) return false;
+            if (tail.compare_exchange_strong(t, t + 1)) break;
+            else t = tail.load(std::memory_order_acquire);
+        }
+        auto i = idx(t);
+        assert(marks[i] == 0);
+        slots[i] = x;
+        marks[i].store(1, std::memory_order_release);
+        while (write_complete.compare_exchange_strong(t, t + 1))
+            if (++t >= tail || !marks[idx(t)])
+                break;
+        return true;
+    }
+
+    bool pop(T& x) {
+        auto h = head.load(std::memory_order_acquire);
+        for (;;) {
+            auto t = write_complete.load(std::memory_order_acquire);
+            if (Base::check_empty(h, t)) return false;
+            if (head.compare_exchange_strong(h, h + 1)) break;
+            else h = write_complete.load(std::memory_order_acquire);
+        }
+        auto i = idx(h);
+        assert(marks[i] == 1);
+        x = slots[i];
+        marks[i].store(0, std::memory_order_release);
+        while (read_complete.compare_exchange_strong(h, h + 1))
+            if (++h >= head || marks[idx(h)])
+                break;
+        return true;
+    }
+
+    template <typename Pause = ThreadPause>
+    void send(const T& x) {
+        static_assert(std::is_base_of<PauseBase, Pause>::value,
+                      "Pause should be derived by PauseBase");
+        while (!push(x)) ThreadPause::pause();
+    }
+
+    template <typename Pause = ThreadPause>
+    T recv() {
+        static_assert(std::is_base_of<PauseBase, Pause>::value,
+                      "Pause should be derived by PauseBase");
+        T x;
+        while(!pop(x)) ThreadPause::pause();
+        return x;
     }
 };
 
