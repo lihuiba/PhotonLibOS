@@ -15,6 +15,9 @@ limitations under the License.
 */
 #include "extfs.h"
 #include <ext2fs/ext2fs.h>
+// ext2fs.h defines a three-argument clamp macro, which std::clamp in the C++
+// headers below then trips over. Photon does not use the macro.
+#undef clamp
 #include <utime.h>
 #include <errno.h>
 #include <fcntl.h>

@@ -16,6 +16,7 @@ limitations under the License.
 
 #pragma once
 
+#include <cstddef>
 #include <tuple>
 #include <utility>
 

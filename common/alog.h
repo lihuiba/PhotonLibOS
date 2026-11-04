@@ -79,7 +79,9 @@ ILogOutput* new_async_log_output(ILogOutput* output, int num_of_queues = 1);
 
 // old-style log_output_file & log_output_file_close
 // return 0 when successed, -1 for failed
-int log_output_file(int fd, uint64_t rotate_limit = UINT64_MAX, uint64_t throttle = -1ULL);
+// The fd overload takes no rotate_limit: rotating by size reopens the file by
+// name, which a bare fd does not supply. Use the const char* overload for that.
+int log_output_file(int fd, uint64_t throttle = -1ULL);
 int log_output_file(const char* fn, uint64_t rotate_limit = UINT64_MAX, int max_log_files = 10, uint64_t throttle = -1ULL);
 int log_output_file_close();
 

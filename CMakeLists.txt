@@ -147,7 +147,18 @@ photon_module(core
                 io/reset_handle.cpp
                 net/basic_socket.cpp net/datagram_socket.cpp net/iostream.cpp
                 net/kernel_socket.cpp net/pooled_socket.cpp net/utils.cpp
-                thread/*.cpp)
+                thread/*.cpp
+                # Public-header guards (guard-<name>.h.cpp, one #include each): they
+                # compile as ordinary module sources, so a header that only compiles
+                # when something else was included first breaks the build. Guards in a
+                # directory globbed above ride along; these are the directories that
+                # this module builds file by file.
+                guard-photon.h.cpp common/metric-meter/guard-*.h.cpp
+                fs/guard-*.h.cpp fs/httpfs/guard-httpfs.h.cpp
+                io/guard-fd-events.h.cpp
+                net/guard-basic_socket.h.cpp net/guard-datagram_socket.h.cpp
+                net/guard-iostream.h.cpp net/guard-socket.h.cpp
+                net/guard-utils.h.cpp net/guard-utils-stdstring.h.cpp)
 
 # Platform event engines -- always-on within their environment.
 photon_module(epoll
@@ -155,24 +166,24 @@ photon_module(epoll
         SOURCES io/epoll.cpp io/epoll-ng.cpp)
 photon_module(aio
         ENABLE  LINUX
-        SOURCES io/aio-wrapper.cpp
+        SOURCES io/aio-wrapper.cpp io/guard-aio-wrapper.h.cpp
         STATIC  aio)
 photon_module(signal
         ENABLE  NOT WIN32
-        SOURCES io/signal.cpp)
+        SOURCES io/signal.cpp io/guard-signal.h.cpp)
 photon_module(kqueue
         ENABLE  APPLE
         SOURCES io/kqueue.cpp)
 photon_module(iocp
         ENABLE  WIN32
-        SOURCES io/iocp.cpp)
+        SOURCES io/iocp.cpp io/guard-iocp.h.cpp)
 photon_module(cache
         ENABLE  LINUX
         SOURCES fs/cache/*.cpp fs/cache/full_file_cache/*.cpp fs/cache/persistent_cache/*.cpp)
 
 # Always-on higher-level modules.
 photon_module(tls
-        SOURCES net/security-context/tls-stream.cpp
+        SOURCES net/security-context/tls-stream.cpp net/security-context/guard-tls-stream.h.cpp
         STATIC  openssl)
 photon_module(http
         REQUIRES tls
@@ -182,41 +193,42 @@ photon_module(rpc
         REQUIRES tls
         SOURCES  rpc/*.cpp)
 photon_module(vdma
-        SOURCES net/vdma/*.cpp)
+        SOURCES net/vdma/*.cpp net/guard-vdma.h.cpp)
 
 # Optional features.
 photon_module(uring
         OPTION  PHOTON_ENABLE_URING
         ENABLE  LINUX
-        SOURCES io/iouring-wrapper.cpp
+        SOURCES io/iouring-wrapper.cpp io/guard-iouring-wrapper.h.cpp
         STATIC  uring
         DEFS    PHOTON_URING=on)
 photon_module(libcurl
         OPTION    PHOTON_ENABLE_LIBCURL
-        SOURCES   net/curl.cpp fs/httpfs/httpfs.cpp
+        SOURCES   net/curl.cpp net/guard-curl.h.cpp fs/httpfs/httpfs.cpp
         STATIC    curl
         DEFS      ENABLE_CURL)
 photon_module(kcp
         OPTION  PHOTON_ENABLE_KCP
-        SOURCES net/kcp.cpp
+        SOURCES net/kcp.cpp net/guard-kcp.h.cpp
         STATIC  kcp
         DEFS    PHOTON_KCP=on)
 photon_module(sasl
         OPTION  PHOTON_ENABLE_SASL
-        SOURCES net/security-context/sasl-stream.cpp
+        SOURCES net/security-context/sasl-stream.cpp net/security-context/guard-sasl-stream.h.cpp
         STATIC  gsasl)
 photon_module(fstack_dpdk
         OPTION    PHOTON_ENABLE_FSTACK_DPDK
-        SOURCES   io/fstack-dpdk.cpp
+        SOURCES   io/fstack-dpdk.cpp io/guard-fstack-dpdk.h.cpp
         STATIC    fstack dpdk
         DEFS      ENABLE_FSTACK_DPDK)
 photon_module(spdk
         OPTION    PHOTON_ENABLE_SPDK
         SOURCES   io/spdkbdev-wrapper.cpp io/spdknvme-wrapper.cpp
+                  io/guard-spdkbdev-wrapper.h.cpp io/guard-spdknvme-wrapper.h.cpp
         STATIC    spdk dpdk)
 photon_module(rsocket
         OPTION    PHOTON_ENABLE_RSOCKET
-        SOURCES   net/rsocket/rsocket.cpp
+        SOURCES   net/rsocket/rsocket.cpp net/rsocket/guard-rsocket.h.cpp
         SHARED    rdmacore)
 photon_module(fuse
         ENABLE  _fuse_enabled
@@ -226,6 +238,7 @@ photon_module(fuse
 photon_module(extfs
         OPTION  PHOTON_ENABLE_EXTFS
         SOURCES fs/extfs/extfs.cpp fs/extfs/extfs_io.cpp fs/extfs/mkfs.cpp fs/extfs/fsck.cpp
+                fs/extfs/guard-extfs.h.cpp
         STATIC  e2fs)
 photon_module(resize
         OPTION  PHOTON_ENABLE_RESIZE
@@ -275,6 +288,27 @@ photon_module(blk_vduse
 photon_module(testing
         OPTION    PHOTON_BUILD_TESTING
         FETCH     gflags googletest)
+
+# Public-header guards (guard-<name>.h.cpp: one exported header's #include and
+# nothing else) are listed among the sources of the module that implements the
+# header, so they compile wherever that module compiles, and a header that only
+# compiles when something else was included first breaks the build. A guard in a
+# disabled module's sources is never built, so the module gate needs no second
+# opinion. coro20.h needs C++20, so its guard is dropped below that standard;
+# easyawaiter.h and easylock.h have no guard, because they need libeasy and
+# nothing provides it.
+set(_guard_skips)
+if (CMAKE_CXX_STANDARD LESS 20)
+    list(APPEND _guard_skips ${PROJECT_SOURCE_DIR}/thread/guard-coro20.h.cpp)
+endif ()
+get_property(_guard_mods GLOBAL PROPERTY PHOTON_MODULE_LIST)
+foreach (_guard_mod ${_guard_mods})
+    get_property(_guard_srcs GLOBAL PROPERTY PHOTON_MODULE_${_guard_mod}_SOURCES)
+    foreach (_guard_skip ${_guard_skips})
+        list(REMOVE_ITEM _guard_srcs "${_guard_skip}")
+    endforeach ()
+    set_property(GLOBAL PROPERTY PHOTON_MODULE_${_guard_mod}_SOURCES "${_guard_srcs}")
+endforeach ()
 
 photon_module_validate()
 list(REMOVE_DUPLICATES dependencies)

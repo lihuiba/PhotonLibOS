@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 #pragma once
-#include <cache.h>
+#include <photon/fs/cache/cache.h>
 #include <photon/fs/forwardfs.h>
 
 namespace photon {

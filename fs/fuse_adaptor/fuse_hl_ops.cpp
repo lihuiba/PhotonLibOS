@@ -13,7 +13,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-// #include "fuse_adaptor.h"
 
 #ifndef FUSE_USE_VERSION
 #define FUSE_USE_VERSION 317
@@ -52,6 +51,12 @@ limitations under the License.
 #include <photon/common/alog.h>
 #include <photon/fs/filesystem.h>
 #include <photon/common/perf_counter.h>
+// After the fuse headers above, not before: this translation unit pins its own
+// FUSE_USE_VERSION and undefines HAVE_SETXATTR first, and fuse_adaptor.h pulls
+// the fuse headers in too.  It was commented out, so nothing checked that the
+// definitions of set_fuse_fs() and get_fuse_xmp_oper() below still match what
+// the public header declares.
+#include "fuse_adaptor.h"
 
 REGISTER_PERF(xmp_getattr, TOTAL)
 REGISTER_PERF(xmp_open, TOTAL)

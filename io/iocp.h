@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <photon/common/timeout.h>
 #include <photon/io/fd-events.h>
+#include <fcntl.h>
 #include <sys/uio.h>
 
 namespace photon {

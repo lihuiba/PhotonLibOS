@@ -302,7 +302,9 @@ auto run(F &&f, Args &&... args) {
 }
 
 inline auto usleep(uint64_t time) {
-    return wrapper(photon::thread_usleep, time);
+    // thread_usleep is overloaded (Timeout / uint64_t), and an overload set has no
+    // type for wrapper() to deduce F from -- call it through a closure instead.
+    return wrapper([](uint64_t t) { return photon::thread_usleep(t); }, time);
 }
 
 inline auto sleep(uint64_t time) { return wrapper(photon::thread_sleep, time); }

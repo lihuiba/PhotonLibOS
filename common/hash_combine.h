@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 #pragma once
+#include <cstddef>
 #include <unordered_set>
 
 namespace photon {
